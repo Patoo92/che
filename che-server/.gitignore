@@ -1,0 +1,15 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.log
+.DS_Store
+app/.dart_tool/
+app/.packages
+app/.pub/
+app/build/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+*.iml
+.idea/
+.vscode/

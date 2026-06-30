@@ -1,0 +1,29 @@
+Hecho. Estructura completa creada en che-server/:
+che-server/
+├── docker-compose.yml          ← Todos los servicios (Ollama, PG, Backend, WebUI)
+├── .env.example                ← Template de variables de entorno
+├── init_db.sql                 ← Esquema PostgreSQL + pgvector + search function
+├── backend/
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── config.py
+│   ├── main.py                 ← FastAPI + WebSocket + TTS endpoint
+│   ├── agent/
+│   │   ├── __init__.py
+│   │   ├── che.py              ← Orquestador LangChain
+│   │   ├── prompts.py          ← System prompt de CHE
+│   │   └── tools.py            ← Herramientas (búsqueda web)
+│   ├── memory/
+│   │   ├── __init__.py
+│   │   ├── manager.py          ← Guardar/buscar en pgvector
+│   │   └── search.py           ← Búsqueda semántica
+│   └── integrations/
+│       ├── __init__.py
+│       ├── search.py           ← DuckDuckGo
+│       └── image_index.py      ← Indexado de imágenes
+└── scripts/
+    └── consolidacion.py        ← Consolidación nocturna
+Pendiente para cuando tengas la PC:
+1. Reemplazar 100.x.x.x en docker-compose.yml por la IP real de Tailscale
+2. Renombrar .env.example → .env con contraseña generada
+3. La app Flutter está en los archivos originales (JARVIS_Guia_Parte2.docx), falta migrar las URLs
