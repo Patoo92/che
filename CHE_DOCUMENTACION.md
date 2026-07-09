@@ -2,7 +2,7 @@
 
 **Versión:** 1.1  
 **Fecha:** Julio 2026  
-**Estado:** Código completo listo para deploy  
+**Estado:** Planning completo. Código base escrito para las Fases 0-7 (sin desplegar ni probar en hardware real). Fase 8 y parte de la Fase 9 sin iniciar. Ver estado detallado por fase en la sección [9.1](#91-resumen-de-fases).  
 **Costo mensual:** $0 USD
 
 ---
@@ -960,25 +960,31 @@ sequenceDiagram
 
 ### 9.1 Resumen de Fases
 
-| Fase | Contenido | Duración Estimada |
-|---|---|---|
-| **Fase 0** | Preparación del servidor (Ubuntu + Docker) | 1 día |
-| **Fase 1** | Infraestructura base (Ollama, PostgreSQL, Tailscale) | 1 día |
-| **Fase 2** | Backend CHE (FastAPI + LangChain + Qwen) | 2-3 días |
-| **Fase 3** | Migración app Flutter (apuntar a servidor local) | 1-2 días |
-| **Fase 4** | STT + TTS local en el celu (Vosk + edge-tts) | 1-2 días |
-| **Fase 5** | Sistema de memoria (PostgreSQL + pgvector) | 2 días |
-| **Fase 6** | Consolidación nocturna | 1 día |
-| **Fase 7** | Open WebUI + interfaz web del Second Brain | 1 día |
-| **Fase 8** | Speaker ID / Voz biométrica | 2 días |
-| **Fase 9** | Integraciones (búsqueda web, control apps) | 3 días |
-| **Fase 10** | Pruebas, ajustes, pulido | 2 días |
+**Leyenda de estado:** ✅ Código escrito y conectado &nbsp;|&nbsp; ⚠️ Código escrito pero parcial/desconectado &nbsp;|&nbsp; ❌ Sin iniciar
+
+| Fase | Contenido | Duración Estimada | Estado del código |
+|---|---|---|---|
+| **Fase 0** | Preparación del servidor (Ubuntu + Docker) | 1 día | ✅ `setup_server.sh` listo |
+| **Fase 1** | Infraestructura base (Ollama, PostgreSQL, Tailscale) | 1 día | ✅ `docker-compose.yml` completo. IP de Tailscale aún en placeholder (`100.x.x.x`) |
+| **Fase 2** | Backend CHE (FastAPI + LangChain + Qwen) | 2-3 días | ✅ Loop de chat + WebSocket + TTS funcional |
+| **Fase 3** | Migración app Flutter (apuntar a servidor local) | 1-2 días | ✅ Servicios creados y conectados en `main.dart` |
+| **Fase 4** | STT + TTS local en el celu (Vosk + edge-tts) | 1-2 días | ✅ Instanciados y en uso en la app |
+| **Fase 5** | Sistema de memoria (PostgreSQL + pgvector) | 2 días | ✅ Completo end-to-end — la pieza más sólida del proyecto |
+| **Fase 6** | Consolidación nocturna | 1 día | ✅ Script (155 líneas) + cron listos |
+| **Fase 7** | Open WebUI + interfaz web del Second Brain | 1 día | ✅ Levantado en docker-compose |
+| **Fase 8** | Speaker ID / Voz biométrica | 2 días | ❌ Sin código |
+| **Fase 9** | Integraciones (búsqueda web, control apps) | 3 días | ⚠️ Búsqueda web escrita pero no conectada al agente. Control de apps: ❌ sin código |
+| **Fase 10** | Pruebas, ajustes, pulido | 2 días | ❌ Checklist sin ningún ítem verificado |
+
+**Importante:** ✅ significa que el código existe y está conectado en el repo, **no** que fue probado corriendo en el servidor real. Ninguna fase pasó todavía por un deploy ni una verificación en hardware — eso es justo lo que cubre el checklist de la Fase 10.
 
 ### 9.2 Detalle por Fase
 
 ---
 
 ## FASE 0 — Preparación del Servidor
+
+> **Estado:** ✅ Código listo (`setup_server.sh`) — 🔲 no ejecutado todavía en el servidor real
 
 **Objetivo:** Ubuntu Server 24.04 LTS instalado y listo en la PC1.
 
@@ -1114,6 +1120,8 @@ sudo netplan apply
 ---
 
 ## FASE 1 — Infraestructura Base
+
+> **Estado:** ✅ `docker-compose.yml` completo — ⚠️ falta reemplazar la IP de Tailscale placeholder (`100.x.x.x`) — 🔲 no levantado todavía
 
 **Objetivo:** Docker, Ollama, PostgreSQL y Tailscale corriendo.
 
@@ -1372,6 +1380,8 @@ tailscale status
 ---
 
 ## FASE 2 — Backend CHE (FastAPI + LangChain)
+
+> **Estado:** ✅ Funcional — loop de chat, WebSocket y endpoint TTS escritos y coherentes entre sí — 🔲 no probado contra Ollama/Postgres reales
 
 **Objetivo:** Backend corriendo localmente conectado a Ollama y PostgreSQL.
 
@@ -1653,6 +1663,8 @@ curl http://100.x.x.x:8000
 
 ## FASE 3 — Migración App Flutter
 
+> **Estado:** ✅ `cache_service.dart` y `websocket_service.dart` escritos y usados en `main.dart` — 🔲 no compilada/probada contra el backend real
+
 **Objetivo:** La app Flutter existente apunta al servidor local en vez de Railway.
 
 ### Paso 3.1: Modificar URL del backend
@@ -1759,6 +1771,8 @@ flutter install
 ---
 
 ## FASE 4 — STT + TTS Local en el Celu
+
+> **Estado:** ✅ `vosk_service.dart` y `tts_service.dart` instanciados en `main.dart` — 🔲 wake word y voz no probados en el Moto G55
 
 **Objetivo:** Vosk hace wake word + STT en el celu, edge-tts genera voz.
 
@@ -2040,6 +2054,8 @@ Future<Map<String, dynamic>> enviarAudio(List<int> bytes) async {
 
 ## FASE 5 — Sistema de Memoria (PostgreSQL + pgvector)
 
+> **Estado:** ✅ La fase más completa del proyecto. `memory/manager.py` guarda y recupera por similitud, enganchado end-to-end al agente — 🔲 no probado contra una base real con datos
+
 **Objetivo:** El backend guarda y busca recuerdos semánticamente.
 
 ### Paso 5.1: memory/manager.py
@@ -2131,6 +2147,8 @@ async def buscar_en_memoria(consulta: str) -> str:
 ---
 
 ## FASE 6 — Consolidación Nocturna
+
+> **Estado:** ✅ `consolidacion.py` (155 líneas) + `setup_cron.sh` listos — 🔲 nunca se ejecutó una consolidación real
 
 **Objetivo:** Script que se ejecuta cada noche para consolidar la memoria.
 
@@ -2317,6 +2335,8 @@ crontab -l
 
 ## FASE 7 — Open WebUI
 
+> **Estado:** ✅ Servicio configurado en `docker-compose.yml` — 🔲 no accedido todavía desde la PC2
+
 **Objetivo:** Interfaz web para consultar el Second Brain desde la PC2.
 
 Open WebUI ya está configurado en el `docker-compose.yml`.
@@ -2344,6 +2364,8 @@ Donde `100.x.x.x` es la IP de Tailscale del servidor.
 
 ## FASE 8 — Speaker ID / Voz Biométrica
 
+> **Estado:** ❌ Sin código todavía. Es, junto con el control de apps de la Fase 9, la parte técnicamente más difícil del proyecto (biometría de voz) — el estimado de 2 días es probablemente corto
+
 **Objetivo:** CHE reconoce quién está hablando (vos o alguien más).
 
 > **Nota:** La wake word "Che" ya está cubierta por Vosk en la Fase 4. Esta fase solo agrega identificación del hablante.
@@ -2361,6 +2383,8 @@ Dado que la PC tiene RAM limitada, el Speaker ID se puede hacer liviano:
 ---
 
 ## FASE 9 — Integraciones
+
+> **Estado:** ⚠️ Mixto. Búsqueda web (9.1): `buscar_web()` escrita (duplicada en `agent/tools.py` e `integrations/search.py`) pero **no importada por `che.py`** — el agente todavía no puede disparar una búsqueda por su cuenta. Control de apps (9.2): ❌ sin código
 
 ### Paso 9.1: Búsqueda Web (DuckDuckGo)
 
