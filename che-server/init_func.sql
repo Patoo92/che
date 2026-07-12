@@ -8,7 +8,7 @@ RETURNS TABLE (
     id UUID,
     contenido TEXT,
     tipo TEXT,
-    timestamp TIMESTAMPTZ,
+    "timestamp" TIMESTAMPTZ,
     metadata JSONB,
     similarity FLOAT
 )
@@ -20,7 +20,7 @@ BEGIN
         m.id,
         m.contenido,
         m.tipo,
-        m.timestamp,
+        m."timestamp",
         m.metadata,
         1 - (m.embedding <=> query_embedding) AS similarity
     FROM memories m
