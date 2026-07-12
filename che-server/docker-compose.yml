@@ -1,12 +1,10 @@
-version: '3.8'
-
 services:
   ollama:
     image: ollama/ollama:latest
     container_name: che-ollama
     restart: unless-stopped
     volumes:
-      - /mnt/che/models:/root/.ollama
+      - /home/che/data/models:/root/.ollama
     ports:
       - "127.0.0.1:11434:11434"
     environment:
@@ -17,16 +15,16 @@ services:
     deploy:
       resources:
         limits:
-          memory: 3g
-        reservations:
           memory: 2g
+        reservations:
+          memory: 1g
 
   postgres:
     image: pgvector/pgvector:pg16
     container_name: che-postgres
     restart: unless-stopped
     volumes:
-      - /mnt/che/pgdata:/var/lib/postgresql/data
+      - /home/che/data/pgdata:/var/lib/postgresql/data
     ports:
       - "127.0.0.1:5432:5432"
     environment:
@@ -50,10 +48,10 @@ services:
       - ollama
       - postgres
     ports:
-      - "100.x.x.x:8000:8000"
+      - "8000:8000"
     volumes:
-      - /mnt/che/brain:/mnt/che/brain
-      - /mnt/che/logs:/mnt/che/logs
+      - /home/che/data/brain:/home/che/data/brain
+      - /home/che/data/logs:/home/che/data/logs
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
       - LLM_MODEL=qwen2.5:1.5b
@@ -65,7 +63,7 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - BACKEND_PORT=8000
       - DEBUG_MODE=False
-      - BRAIN_PATH=/mnt/che/brain
+      - BRAIN_PATH=/home/che/data/brain
       - SEARCH_PROVIDER=duckduckgo
     deploy:
       resources:
@@ -81,9 +79,9 @@ services:
     depends_on:
       - ollama
     ports:
-      - "127.0.0.1:3000:8080"
+      - "3000:8080"
     volumes:
-      - /mnt/che/brain:/mnt/che/brain:ro
+      - /home/che/data/brain:/home/che/data/brain:ro
       - open-webui-data:/app/backend/data
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
@@ -92,9 +90,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256m
+          memory: 1g
         reservations:
-          memory: 128m
+          memory: 512m
 
 volumes:
   open-webui-data:
