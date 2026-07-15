@@ -1,3 +1,15 @@
 *.exe
 *.iso
 che-preview.html
+test_ssh*.py
+test_ws*.py
+
+che-voice/build/
+che-voice/.dart_tool/
+che-voice/.packages
+che-voice/android/.gradle/
+che-voice/android/app/build/
+che-voice/.flutter-plugins
+che-voice/.flutter-plugins-dependencies
+che-voice/.metadata
+che-voice/android/local.properties

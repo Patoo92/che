@@ -4,6 +4,8 @@ from fastapi.responses import Response
 import uvicorn
 import json
 import base64
+import io
+import struct
 from config import BACKEND_PORT, DEBUG, BRAIN_PATH
 from agent.che import CheAgent
 
@@ -66,6 +68,45 @@ async def websocket_endpoint(websocket: WebSocket):
 
     except WebSocketDisconnect:
         print("[CHE] App desconectada")
+
+@app.websocket("/ws/voice")
+async def voice_websocket(websocket: WebSocket):
+    await websocket.accept()
+    print("[CHE Voice] Cliente conectado")
+    try:
+        while True:
+            data = await websocket.receive_text()
+            msg = json.loads(data)
+            tipo = msg.get("type", "")
+
+            if tipo == "transcript":
+                texto = msg.get("text", "")
+                if not texto:
+                    await websocket.send_text(json.dumps({
+                        "type": "error",
+                        "text": "Transcripcion vacia"
+                    }))
+                    continue
+
+                await websocket.send_text(json.dumps({
+                    "type": "status",
+                    "text": "procesando"
+                }))
+
+                respuesta = await che.procesar(texto)
+
+                await websocket.send_text(json.dumps({
+                    "type": "response",
+                    "text": respuesta
+                }))
+
+            elif tipo == "interrupt":
+                await websocket.send_text(json.dumps({
+                    "type": "interrupt_ack"
+                }))
+
+    except WebSocketDisconnect:
+        print("[CHE Voice] Cliente desconectado")
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=BACKEND_PORT, reload=DEBUG)

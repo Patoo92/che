@@ -1,8 +1,8 @@
 # CHE — Documentación Técnica Completa del Proyecto
 
-**Versión:** 1.1  
+**Versión:** 1.2  
 **Fecha:** Julio 2026  
-**Estado:** Planning completo. Código base escrito para las Fases 0-7 (sin desplegar ni probar en hardware real). Fase 8 y parte de la Fase 9 sin iniciar. Ver estado detallado por fase en la sección [9.1](#91-resumen-de-fases).  
+**Estado:** Fases 0-7 desplegadas y funcionando en hardware real. Backend con LLM + memoria + WebSocket activos. App Flutter (Vosk wake word + STT + flutter_tts) compilada e instalada en Moto G55. Pendiente: test end-to-end del phone, SSH re-setup, consolidación nocturna, Fase 8-10.  
 **Costo mensual:** $0 USD
 
 ---
@@ -964,14 +964,14 @@ sequenceDiagram
 
 | Fase | Contenido | Duración Estimada | Estado del código |
 |---|---|---|---|
-| **Fase 0** | Preparación del servidor (Ubuntu + Docker) | 1 día | ✅ `setup_server.sh` listo |
-| **Fase 1** | Infraestructura base (Ollama, PostgreSQL, Tailscale) | 1 día | ✅ `docker-compose.yml` completo. IP de Tailscale aún en placeholder (`100.x.x.x`) |
-| **Fase 2** | Backend CHE (FastAPI + LangChain + Qwen) | 2-3 días | ✅ Loop de chat + WebSocket + TTS funcional |
-| **Fase 3** | Migración app Flutter (apuntar a servidor local) | 1-2 días | ✅ Servicios creados y conectados en `main.dart` |
-| **Fase 4** | STT + TTS local en el celu (Vosk + edge-tts) | 1-2 días | ✅ Instanciados y en uso en la app |
-| **Fase 5** | Sistema de memoria (PostgreSQL + pgvector) | 2 días | ✅ Completo end-to-end — la pieza más sólida del proyecto |
-| **Fase 6** | Consolidación nocturna | 1 día | ✅ Script (155 líneas) + cron listos |
-| **Fase 7** | Open WebUI + interfaz web del Second Brain | 1 día | ✅ Levantado en docker-compose |
+| **Fase 0** | Preparación del servidor (Ubuntu + Docker) | 1 día | ✅ Desplegado y corriendo en PC2 |
+| **Fase 1** | Infraestructura base (Ollama, PostgreSQL, Tailscale) | 1 día | ✅ 4 containers Docker activos, Tailscale conectado |
+| **Fase 2** | Backend CHE (FastAPI + LangChain + Qwen) | 2-3 días | ✅ `/ws/voice` endpoint funcional, LLM responde, memoria con pgvector |
+| **Fase 3** | Migración app Flutter (apuntar a servidor local) | 1-2 días | ✅ Compilada e instalada en Moto G55, wake word + STT funcionando |
+| **Fase 4** | STT + TTS local en el celu (Vosk + edge-tts) | 1-2 días | ✅ Vosk grammar→free mode con dispose(), TTS: flutter_tts local (edge-tts bloqueado desde server) |
+| **Fase 5** | Sistema de memoria (PostgreSQL + pgvector) | 2 días | ✅ Tabla memories + search_memories function + pgvector extension creadas |
+| **Fase 6** | Consolidación nocturna | 1 día | ⚠️ Script existe pero no verificado en cron real |
+| **Fase 7** | Open WebUI + interfaz web del Second Brain | 1 día | ✅ Levantado en docker-compose, accesible en :3000 |
 | **Fase 8** | Speaker ID / Voz biométrica | 2 días | ❌ Sin código |
 | **Fase 9** | Integraciones (búsqueda web, control apps) | 3 días | ⚠️ Búsqueda web escrita pero no conectada al agente. Control de apps: ❌ sin código |
 | **Fase 10** | Pruebas, ajustes, pulido | 2 días | ❌ Checklist sin ningún ítem verificado |
@@ -3386,5 +3386,41 @@ Si no tenés Flutter, avisame y te doy la guía para instalarlo.
 
 ---
 
-> **Documento v1.1** — Julio 2026  
+## Changelog
+
+### v1.2 — 15 Julio 2026
+
+**Desplegado en hardware real:**
+
+- **Servidor (PC2 Ubuntu):** 4 containers Docker corriendo: `che-backend`, `che-postgres`, `che-ollama`, `che-webui`
+- **Backend `/ws/voice`:** endpoint WebSocket funcional — recibe transcript, procesa con Qwen 2.5 vía LangChain, devuelve respuesta de texto
+- **Memoria:** tabla `memories` con pgvector(768) + función `search_memories()` creadas y operativas
+- **App Flutter compilada e instalada en Moto G55:**
+  - Vosk grammar mode para wake word "che" — detecta correctamente
+  - Vosk free mode para comandos — transcribe correctamente
+  - Bug del singleton `SpeechService` resuelto con `dispose()` antes de recrear
+  - `flutter_tts` integrado para TTS local en el device (reemplaza edge_tts)
+  - `web_socket_channel` conecta al backend
+- **TTS:** edge_tts bloqueado desde el server (Microsoft 403). Solución: TTS local con flutter_tts en Android
+- **Variables de entorno:** todas las IPs y paths configurados en docker-compose.yml
+
+**Pendiente:**
+1. Test end-to-end completo en Moto G55 ("che" → comando → LLM → flutter_tts habla)
+2. Verificar que el phone alcanza el server via Tailscale (100.78.234.8)
+3. SSH desde HP OMEN al server: fail2ban bloqueó la IP, re-setup de llaves necesario
+4. Build release APK cuando el debug funcione perfecto
+5. Configurar Obsidian para acceder al Second Brain desde PC1
+6. Consolidación nocturna (cron) — verificar en producción
+7. Fase 8: Speaker ID / Voz biométrica
+8. Fase 9: Integraciones (búsqueda web conectada al agente)
+9. Fase 10: Pruebas, ajustes, pulido
+
+**Bugs resueltos:**
+- Vosk `SpeechService` singleton: no se podía crear segundo recognizer → resuelto con `dispose()` antes de `initSpeechService()`
+- PostgreSQL faltaba extensión `vector` → `CREATE EXTENSION IF NOT EXISTS vector`
+- PostgreSQL faltaba función `search_memories` → creada con PL/pgSQL
+- Docker container no tenía `edge_tts` instalado → reinstalado manualmente, luego eliminado del server (se usa flutter_tts)
+- Container Docker no tenía el endpoint `/ws/voice` → main.py actualizado + rebuild
+
+> **Documento v1.2** — Julio 2026  
 > Próxima actualización: al completar la Fase 2 (Backend CHE corriendo localmente)
