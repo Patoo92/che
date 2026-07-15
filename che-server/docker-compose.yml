@@ -68,9 +68,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512m
+          memory: 1g
         reservations:
-          memory: 256m
+          memory: 512m
 
   open-webui:
     image: ghcr.io/open-webui/open-webui:main

@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:record/record.dart';
 import 'package:vosk_flutter_service/vosk_flutter_service.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -78,11 +81,14 @@ class _CheHomeState extends State<CheHome> {
   SpeechService? _speechService;
   WebSocketChannel? _channel;
   final FlutterTts _tts = FlutterTts();
+  final AudioRecorder _recorder = AudioRecorder();
 
   bool _awaitingCommand = false;
   bool _isProcessing = false;
   bool _isSpeaking = false;
   bool _listeningForWakeWord = true;
+  Timer? _silenceTimer;
+  DateTime? _recordingStartTime;
 
   @override
   void initState() {
@@ -95,10 +101,26 @@ class _CheHomeState extends State<CheHome> {
       _showForegroundNotification();
 
       setState(() => _status = 'Configurando voz...');
-      await _tts.setLanguage('es-AR');
+      await _tts.setLanguage('es-ES');
       await _tts.setSpeechRate(0.5);
       await _tts.setVolume(1.0);
       await _tts.setPitch(1.0);
+
+      final voices = await _tts.getVoices;
+      String? selectedVoice;
+      for (final v in voices) {
+        final name = v['name'] ?? '';
+        final locale = v['locale'] ?? '';
+        if (locale.startsWith('es-ES') && name.contains('local')) {
+          print('[CHE] TTS voice: $name ($locale)');
+          if (selectedVoice == null) selectedVoice = name;
+        }
+      }
+      if (selectedVoice != null) {
+        await _tts.setVoice({'name': selectedVoice, 'locale': 'es-ES'});
+        print('[CHE] TTS voice selected: $selectedVoice');
+      }
+
       _tts.setCompletionHandler(() {
         print('[CHE] TTS finished, listening again...');
         _isSpeaking = false;
@@ -123,11 +145,13 @@ class _CheHomeState extends State<CheHome> {
       final modelLoader = ModelLoader();
 
       final modelsList = await modelLoader.loadModelsList();
-      print('[CHE] Models: ${modelsList.map((m) => m.name).join(', ')}');
 
       final modelDesc = modelsList.firstWhere(
         (m) => m.name == 'vosk-model-small-es-0.42',
-        orElse: () => modelsList.first,
+        orElse: () => modelsList.firstWhere(
+          (m) => m.name == 'vosk-model-es-0.42-lgraph',
+          orElse: () => modelsList.first,
+        ),
       );
       print('[CHE] Loading: ${modelDesc.name}');
 
@@ -192,10 +216,10 @@ class _CheHomeState extends State<CheHome> {
           print('[CHE] Wake word detected!');
           _listeningForWakeWord = false;
           setState(() {
-            _status = 'Escuchando...';
+            _status = 'Grabando...';
             _lastCommand = '';
           });
-          _startCommandListening();
+          _startRecording();
         }
       });
 
@@ -208,7 +232,7 @@ class _CheHomeState extends State<CheHome> {
     }
   }
 
-  Future<void> _startCommandListening() async {
+  Future<void> _startRecording() async {
     try {
       if (_speechService != null) {
         await _speechService!.stop();
@@ -217,58 +241,116 @@ class _CheHomeState extends State<CheHome> {
         _speechService = null;
       }
 
-      final recognizer = await _vosk!.createRecognizer(
-        model: _model!,
-        sampleRate: 16000,
+      final tempDir = Directory.systemTemp;
+      final tempPath = '${tempDir.path}/che_recording.wav';
+
+      if (await _recorder.isRecording()) {
+        await _recorder.stop();
+      }
+
+      await _recorder.start(
+        const RecordConfig(
+          encoder: AudioEncoder.pcm16bits,
+          sampleRate: 16000,
+          numChannels: 1,
+        ),
+        path: tempPath,
       );
-      print('[CHE] Free recognizer created for command');
 
-      _speechService = await _vosk!.initSpeechService(recognizer);
-      print('[CHE] Speech service ready (free mode)');
-
+      _recordingStartTime = DateTime.now();
       _awaitingCommand = true;
+      _startAmplitudeMonitoring();
 
-      _speechService!.onPartial().listen((partial) {
-        if (!_awaitingCommand) return;
-        String text = partial;
-        try {
-          final json = jsonDecode(partial);
-          text = json['partial'] ?? json['text'] ?? partial;
-        } catch (_) {}
-        if (text.isNotEmpty) {
-          print('[CHE] Command partial: "$text"');
-          setState(() => _lastCommand = text);
-        }
-      });
-
-      _speechService!.onResult().listen((result) {
-        if (!_awaitingCommand) return;
-        String text = result;
-        try {
-          final json = jsonDecode(result);
-          text = json['text'] ?? result;
-        } catch (_) {}
-        print('[CHE] Command result: "$text"');
-
-        final command = text.trim();
-        if (command.isNotEmpty) {
-          _awaitingCommand = false;
-          setState(() {
-            _lastCommand = command;
-            _status = 'Procesando...';
-          });
-          _isProcessing = true;
-          _channel?.sink.add(jsonEncode({
-            'type': 'transcript',
-            'text': command,
-          }));
-        }
-      });
-
-      await _speechService!.start();
-      print('[CHE] Listening for command...');
+      print('[CHE] Recording started to $tempPath');
     } catch (e) {
-      print('[CHE] Command init error: $e');
+      print('[CHE] Recording error: $e');
+      setState(() => _status = 'Error grabando: $e');
+    }
+  }
+
+  void _startAmplitudeMonitoring() {
+    _silenceTimer?.cancel();
+    bool hasSpoken = false;
+    Timer? monitorTimer;
+
+    monitorTimer = Timer.periodic(const Duration(milliseconds: 300), (timer) async {
+      if (!_awaitingCommand) {
+        timer.cancel();
+        return;
+      }
+
+      try {
+        final amplitude = await _recorder.getAmplitude();
+        final current = amplitude.current;
+
+        final elapsed = DateTime.now().difference(_recordingStartTime!).inMilliseconds;
+
+        if (current > -30) {
+          hasSpoken = true;
+          _silenceTimer?.cancel();
+          _silenceTimer = Timer(const Duration(seconds: 2), () {
+            if (_awaitingCommand) {
+              print('[CHE] Silence after speech, stopping recording');
+              _stopRecordingAndSend();
+            }
+          });
+        }
+
+        if (elapsed >= 8000) {
+          print('[CHE] Max recording time reached (8s)');
+          timer.cancel();
+          _stopRecordingAndSend();
+        }
+      } catch (_) {}
+    });
+
+    _silenceTimer = Timer(const Duration(seconds: 3), () {
+      if (_awaitingCommand && !hasSpoken) {
+        print('[CHE] No speech detected in 3s');
+        monitorTimer?.cancel();
+        _stopRecordingAndSend();
+      }
+    });
+  }
+
+  Future<void> _stopRecordingAndSend() async {
+    if (!_awaitingCommand) return;
+    _awaitingCommand = false;
+    _silenceTimer?.cancel();
+
+    try {
+      final path = await _recorder.stop();
+      print('[CHE] Recording stopped, path: $path');
+
+      if (path != null && path.isNotEmpty) {
+        final file = File(path);
+        if (await file.exists()) {
+          final bytes = await file.readAsBytes();
+          if (bytes.length > 500) {
+            print('[CHE] Audio: ${bytes.length} bytes, sending...');
+
+            setState(() => _status = 'Procesando...');
+            _isProcessing = true;
+
+            _channel?.sink.add(jsonEncode({
+              'type': 'audio',
+              'data': base64Encode(bytes),
+            }));
+
+            await file.delete();
+            return;
+          }
+          await file.delete();
+        }
+      }
+
+      print('[CHE] No audio recorded, going back to wake word');
+      _isProcessing = false;
+      _startWakeWordListening();
+    } catch (e) {
+      print('[CHE] Stop recording error: $e');
+      _isProcessing = false;
+      _startWakeWordListening();
     }
   }
 
@@ -288,11 +370,24 @@ class _CheHomeState extends State<CheHome> {
           _isProcessing = false;
           _isSpeaking = true;
           _speak(text);
+        } else if (type == 'transcript') {
+          final text = data['text'] ?? '';
+          setState(() {
+            _lastCommand = text;
+          });
+          print('[CHE] Whisper transcript: "$text"');
         } else if (type == 'status') {
-          _isProcessing = data['text'] == 'procesando';
+          final st = data['text'] ?? '';
+          if (st == 'procesando') {
+            _isProcessing = true;
+            setState(() => _status = 'Procesando...');
+          } else if (st == 'transcribiendo') {
+            setState(() => _status = 'Transcribiendo...');
+          }
         } else if (type == 'error') {
           _isProcessing = false;
           setState(() => _status = 'Error: ${data['text']}');
+          Future.delayed(const Duration(seconds: 3), _startWakeWordListening);
         }
       },
       onDone: () {
@@ -331,8 +426,10 @@ class _CheHomeState extends State<CheHome> {
 
   @override
   void dispose() {
+    _silenceTimer?.cancel();
     _channel?.sink.close();
     _tts.stop();
+    _recorder.dispose();
     super.dispose();
   }
 

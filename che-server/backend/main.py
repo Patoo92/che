@@ -8,15 +8,16 @@ import io
 import struct
 from config import BACKEND_PORT, DEBUG, BRAIN_PATH
 from agent.che import CheAgent
+from stt.whisper_stt import transcribe_audio
 
-app = FastAPI(title="CHE Backend", version="1.0.0")
+app = FastAPI(title="CHE Backend", version="1.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 che = CheAgent()
 
 @app.get("/")
 async def root():
-    return {"status": "CHE online", "version": "1.0.0", "modelo": "qwen2.5:1.5b"}
+    return {"status": "CHE online", "version": "1.1.0", "modelo": "qwen2.5:1.5b"}
 
 @app.get("/tts")
 async def text_to_speech(texto: str):
@@ -56,7 +57,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 if not texto:
                     await websocket.send_text(json.dumps({
                         "type": "error",
-                        "text": "No se recibió transcripción. Vosk debe ejecutarse en el dispositivo."
+                        "text": "No se recibio transcripcion."
                     }))
                     continue
 
@@ -69,41 +70,100 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         print("[CHE] App desconectada")
 
+async def _handle_audio(websocket: WebSocket, audio_bytes: bytes):
+    await websocket.send_text(json.dumps({
+        "type": "status",
+        "text": "transcribiendo"
+    }))
+
+    try:
+        texto = transcribe_audio(audio_bytes)
+    except Exception as e:
+        print(f"[CHE Voice] Whisper error: {e}")
+        await websocket.send_text(json.dumps({
+            "type": "error",
+            "text": f"Error de transcripcion: {e}"
+        }))
+        return
+
+    if not texto.strip():
+        await websocket.send_text(json.dumps({
+            "type": "error",
+            "text": "No se pudo transcribir el audio"
+        }))
+        return
+
+    await websocket.send_text(json.dumps({
+        "type": "transcript",
+        "text": texto
+    }))
+
+    await websocket.send_text(json.dumps({
+        "type": "status",
+        "text": "procesando"
+    }))
+
+    respuesta = await che.procesar(texto)
+
+    await websocket.send_text(json.dumps({
+        "type": "response",
+        "text": respuesta
+    }))
+
 @app.websocket("/ws/voice")
 async def voice_websocket(websocket: WebSocket):
     await websocket.accept()
     print("[CHE Voice] Cliente conectado")
     try:
         while True:
-            data = await websocket.receive_text()
-            msg = json.loads(data)
-            tipo = msg.get("type", "")
+            msg = await websocket.receive()
 
-            if tipo == "transcript":
-                texto = msg.get("text", "")
-                if not texto:
+            if "bytes" in msg and msg["bytes"] is not None:
+                audio_bytes = msg["bytes"]
+                print(f"[CHE Voice] Binary received: {len(audio_bytes)} bytes")
+                await _handle_audio(websocket, audio_bytes)
+
+            elif "text" in msg and msg["text"] is not None:
+                data = json.loads(msg["text"])
+                tipo = data.get("type", "")
+
+                if tipo == "audio":
+                    audio_b64 = data.get("data", "")
+                    if not audio_b64:
+                        await websocket.send_text(json.dumps({
+                            "type": "error",
+                            "text": "Audio vacio"
+                        }))
+                        continue
+                    audio_bytes = base64.b64decode(audio_b64)
+                    print(f"[CHE Voice] Base64 audio: {len(audio_bytes)} bytes")
+                    await _handle_audio(websocket, audio_bytes)
+
+                elif tipo == "transcript":
+                    texto = data.get("text", "")
+                    if not texto:
+                        await websocket.send_text(json.dumps({
+                            "type": "error",
+                            "text": "Transcripcion vacia"
+                        }))
+                        continue
+
                     await websocket.send_text(json.dumps({
-                        "type": "error",
-                        "text": "Transcripcion vacia"
+                        "type": "status",
+                        "text": "procesando"
                     }))
-                    continue
 
-                await websocket.send_text(json.dumps({
-                    "type": "status",
-                    "text": "procesando"
-                }))
+                    respuesta = await che.procesar(texto)
 
-                respuesta = await che.procesar(texto)
+                    await websocket.send_text(json.dumps({
+                        "type": "response",
+                        "text": respuesta
+                    }))
 
-                await websocket.send_text(json.dumps({
-                    "type": "response",
-                    "text": respuesta
-                }))
-
-            elif tipo == "interrupt":
-                await websocket.send_text(json.dumps({
-                    "type": "interrupt_ack"
-                }))
+                elif tipo == "interrupt":
+                    await websocket.send_text(json.dumps({
+                        "type": "interrupt_ack"
+                    }))
 
     except WebSocketDisconnect:
         print("[CHE Voice] Cliente desconectado")
