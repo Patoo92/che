@@ -113,19 +113,22 @@ async def _handle_audio(websocket: WebSocket, audio_bytes: bytes):
 @app.websocket("/ws/voice")
 async def voice_websocket(websocket: WebSocket):
     await websocket.accept()
-    print("[CHE Voice] Cliente conectado")
+    print("[CHE Voice] Cliente conectado", flush=True)
     try:
         while True:
+            print("[CHE Voice] Waiting for message...", flush=True)
             msg = await websocket.receive()
+            print(f"[CHE Voice] Received msg keys: {list(msg.keys())}", flush=True)
 
             if "bytes" in msg and msg["bytes"] is not None:
                 audio_bytes = msg["bytes"]
-                print(f"[CHE Voice] Binary received: {len(audio_bytes)} bytes")
+                print(f"[CHE Voice] Binary received: {len(audio_bytes)} bytes", flush=True)
                 await _handle_audio(websocket, audio_bytes)
 
             elif "text" in msg and msg["text"] is not None:
                 data = json.loads(msg["text"])
                 tipo = data.get("type", "")
+                print(f"[CHE Voice] Text msg type: {tipo}", flush=True)
 
                 if tipo == "audio":
                     audio_b64 = data.get("data", "")
@@ -136,7 +139,7 @@ async def voice_websocket(websocket: WebSocket):
                         }))
                         continue
                     audio_bytes = base64.b64decode(audio_b64)
-                    print(f"[CHE Voice] Base64 audio: {len(audio_bytes)} bytes")
+                    print(f"[CHE Voice] Base64 audio: {len(audio_bytes)} bytes", flush=True)
                     await _handle_audio(websocket, audio_bytes)
 
                 elif tipo == "transcript":
@@ -164,9 +167,13 @@ async def voice_websocket(websocket: WebSocket):
                     await websocket.send_text(json.dumps({
                         "type": "interrupt_ack"
                     }))
+            else:
+                print(f"[CHE Voice] Unknown msg: {msg}", flush=True)
 
     except WebSocketDisconnect:
-        print("[CHE Voice] Cliente desconectado")
+        print("[CHE Voice] Cliente desconectado", flush=True)
+    except Exception as e:
+        print(f"[CHE Voice] Error: {e}", flush=True)
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=BACKEND_PORT, reload=DEBUG)
