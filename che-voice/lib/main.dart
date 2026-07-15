@@ -304,9 +304,9 @@ class _CheHomeState extends State<CheHome> {
       } catch (_) {}
     });
 
-    _silenceTimer = Timer(const Duration(seconds: 3), () {
+    _silenceTimer = Timer(const Duration(seconds: 5), () {
       if (_awaitingCommand && !hasSpoken) {
-        print('[CHE] No speech detected in 3s');
+        print('[CHE] No speech detected in 5s');
         monitorTimer?.cancel();
         _stopRecordingAndSend();
       }

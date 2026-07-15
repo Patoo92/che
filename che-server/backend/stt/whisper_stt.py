@@ -1,6 +1,8 @@
 from faster_whisper import WhisperModel
 import io
 import wave
+import tempfile
+import os
 
 _model = None
 
@@ -15,24 +17,31 @@ def get_model():
 def transcribe_audio(audio_bytes: bytes, sample_rate: int = 16000) -> str:
     model = get_model()
 
-    if audio_bytes[:4] == b'RIFF':
-        wav_bytes = audio_bytes
-    else:
-        wav_buffer = io.BytesIO()
-        with wave.open(wav_buffer, "wb") as wf:
-            wf.setnchannels(1)
-            wf.setsampwidth(2)
-            wf.setframerate(sample_rate)
-            wf.writeframes(audio_bytes)
-        wav_bytes = wav_buffer.getvalue()
+    tmp_path = None
+    try:
+        if audio_bytes[:4] == b'RIFF':
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                f.write(audio_bytes)
+                tmp_path = f.name
+        else:
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                with wave.open(f, "wb") as wf:
+                    wf.setnchannels(1)
+                    wf.setsampwidth(2)
+                    wf.setframerate(sample_rate)
+                    wf.writeframes(audio_bytes)
+                tmp_path = f.name
 
-    segments, info = model.transcribe(
-        wav_bytes,
-        language="es",
-        beam_size=3,
-        vad_filter=True,
-    )
+        segments, info = model.transcribe(
+            tmp_path,
+            language="es",
+            beam_size=3,
+            vad_filter=True,
+        )
 
-    text = " ".join(seg.text.strip() for seg in segments)
-    print(f"[STT] Whisper: '{text}' (lang={info.language}, prob={info.language_probability:.2f})")
-    return text
+        text = " ".join(seg.text.strip() for seg in segments)
+        print(f"[STT] Whisper: '{text}' (lang={info.language}, prob={info.language_probability:.2f})")
+        return text
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
