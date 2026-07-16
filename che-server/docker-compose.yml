@@ -48,7 +48,7 @@ services:
       - ollama
       - postgres
     ports:
-      - "8000:8000"
+      - "${BIND_ADDRESS:-100.78.234.8}:8000:8000"
     volumes:
       - /home/che/data/brain:/home/che/data/brain
       - /home/che/data/logs:/home/che/data/logs
@@ -65,6 +65,7 @@ services:
       - DEBUG_MODE=False
       - BRAIN_PATH=/home/che/data/brain
       - SEARCH_PROVIDER=duckduckgo
+      - WS_SECRET=${WS_SECRET}
     deploy:
       resources:
         limits:

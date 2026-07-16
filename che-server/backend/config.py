@@ -15,3 +15,5 @@ DEBUG = os.getenv("DEBUG_MODE", "False") == "True"
 
 BRAIN_PATH = os.getenv("BRAIN_PATH", "/mnt/che/brain")
 SEARCH_PROVIDER = os.getenv("SEARCH_PROVIDER", "duckduckgo")
+
+WS_SECRET = os.getenv("WS_SECRET", "")

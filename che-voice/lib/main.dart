@@ -87,6 +87,7 @@ class _CheHomeState extends State<CheHome> {
   bool _isProcessing = false;
   bool _isSpeaking = false;
   bool _listeningForWakeWord = true;
+  bool _audioSent = false;
   Timer? _silenceTimer;
   DateTime? _recordingStartTime;
 
@@ -259,6 +260,7 @@ class _CheHomeState extends State<CheHome> {
 
       _recordingStartTime = DateTime.now();
       _awaitingCommand = true;
+      _audioSent = false;
       _startAmplitudeMonitoring();
 
       print('[CHE] Recording started to $tempPath');
@@ -271,9 +273,10 @@ class _CheHomeState extends State<CheHome> {
   void _startAmplitudeMonitoring() {
     _silenceTimer?.cancel();
     bool hasSpoken = false;
+    double peakAmplitude = -100;
     Timer? monitorTimer;
 
-    monitorTimer = Timer.periodic(const Duration(milliseconds: 300), (timer) async {
+    monitorTimer = Timer.periodic(const Duration(milliseconds: 200), (timer) async {
       if (!_awaitingCommand) {
         timer.cancel();
         return;
@@ -282,40 +285,58 @@ class _CheHomeState extends State<CheHome> {
       try {
         final amplitude = await _recorder.getAmplitude();
         final current = amplitude.current;
-
         final elapsed = DateTime.now().difference(_recordingStartTime!).inMilliseconds;
 
-        if (current > -30) {
+        if (current > peakAmplitude) {
+          peakAmplitude = current;
+        }
+
+        final silenceThreshold = peakAmplitude > -35 ? peakAmplitude - 12 : -55;
+
+        if (current > silenceThreshold && current > -55) {
+          if (!hasSpoken) {
+            print('[CHE] Speech! peak=${peakAmplitude.toStringAsFixed(1)} current=${current.toStringAsFixed(1)}');
+          }
           hasSpoken = true;
           _silenceTimer?.cancel();
-          _silenceTimer = Timer(const Duration(seconds: 2), () {
+          _silenceTimer = Timer(const Duration(seconds: 1), () {
             if (_awaitingCommand) {
-              print('[CHE] Silence after speech, stopping recording');
+              print('[CHE] Silence after speech (peak=${peakAmplitude.toStringAsFixed(1)})');
               _stopRecordingAndSend();
             }
           });
         }
 
-        if (elapsed >= 8000) {
-          print('[CHE] Max recording time reached (8s)');
+        if (elapsed >= 6000) {
+          print('[CHE] Max recording 6s');
           timer.cancel();
-          _stopRecordingAndSend();
+          _silenceTimer?.cancel();
+          if (hasSpoken) {
+            _stopRecordingAndSend();
+          } else {
+            print('[CHE] No speech, discarding');
+            _awaitingCommand = false;
+            await _recorder.stop();
+            _startWakeWordListening();
+          }
         }
       } catch (_) {}
     });
 
-    _silenceTimer = Timer(const Duration(seconds: 5), () {
+    _silenceTimer = Timer(const Duration(seconds: 4), () {
       if (_awaitingCommand && !hasSpoken) {
-        print('[CHE] No speech detected in 5s');
+        print('[CHE] No speech in 4s, abort');
         monitorTimer?.cancel();
-        _stopRecordingAndSend();
+        _awaitingCommand = false;
+        _recorder.stop().then((_) => _startWakeWordListening());
       }
     });
   }
 
   Future<void> _stopRecordingAndSend() async {
-    if (!_awaitingCommand) return;
+    if (!_awaitingCommand || _audioSent) return;
     _awaitingCommand = false;
+    _audioSent = true;
     _silenceTimer?.cancel();
 
     try {
@@ -391,12 +412,19 @@ class _CheHomeState extends State<CheHome> {
         }
       },
       onDone: () {
-        print('[CHE] WS disconnected, reconnecting...');
-        Future.delayed(const Duration(seconds: 3), _connectWs);
+        if (_isProcessing) {
+          print('[CHE] WS disconnected while processing, waiting...');
+          Future.delayed(const Duration(seconds: 5), _connectWs);
+        } else {
+          print('[CHE] WS disconnected, reconnecting...');
+          Future.delayed(const Duration(seconds: 3), _connectWs);
+        }
       },
       onError: (error) {
         print('[CHE] WS error: $error');
-        Future.delayed(const Duration(seconds: 3), _connectWs);
+        if (!_isProcessing) {
+          Future.delayed(const Duration(seconds: 3), _connectWs);
+        }
       },
     );
     print('[CHE] WebSocket connecting...');
