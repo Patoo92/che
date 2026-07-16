@@ -80,7 +80,7 @@ services:
     depends_on:
       - ollama
     ports:
-      - "3000:8080"
+      - "${BIND_ADDRESS:-100.78.234.8}:3000:8080"
     volumes:
       - /home/che/data/brain:/home/che/data/brain:ro
       - open-webui-data:/app/backend/data
