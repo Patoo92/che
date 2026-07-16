@@ -48,7 +48,7 @@ services:
       - ollama
       - postgres
     ports:
-      - "${BIND_ADDRESS:-100.78.234.8}:8000:8000"
+      - "0.0.0.0:8000:8000"
     volumes:
       - /home/che/data/brain:/home/che/data/brain
       - /home/che/data/logs:/home/che/data/logs
