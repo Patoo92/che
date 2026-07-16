@@ -12,6 +12,7 @@ import 'package:vosk_flutter_service/vosk_flutter_service.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 const String serverUrl = 'ws://100.78.234.8:8000/ws/voice';
+const String wsSecret = 'drtWCjmGRU9/pAOfvNH9VUtR3w0vME/W5oneIHrxErI=';
 const String wakeWord = 'che';
 const String notificationChannelId = 'che_service';
 const String notificationChannelName = 'CHE';
@@ -346,9 +347,10 @@ class _CheHomeState extends State<CheHome> {
       if (path != null && path.isNotEmpty) {
         final file = File(path);
         if (await file.exists()) {
-          final bytes = await file.readAsBytes();
+          final rawBytes = await file.readAsBytes();
+          final bytes = _amplifyPcm16(rawBytes, gain: 4.0);
           if (bytes.length > 500) {
-            print('[CHE] Audio: ${bytes.length} bytes, sending...');
+            print('[CHE] Audio: ${bytes.length} bytes (amplified), sending...');
 
             setState(() => _status = 'Procesando...');
             _isProcessing = true;
@@ -376,7 +378,7 @@ class _CheHomeState extends State<CheHome> {
   }
 
   void _connectWs() {
-    _channel = WebSocketChannel.connect(Uri.parse(serverUrl));
+    _channel = WebSocketChannel.connect(Uri.parse('$serverUrl?token=$wsSecret'));
     _channel!.stream.listen(
       (message) {
         final data = jsonDecode(message);
@@ -434,6 +436,17 @@ class _CheHomeState extends State<CheHome> {
     if (text.isEmpty) return;
     print('[CHE] Speaking: $text');
     await _tts.speak(text);
+  }
+
+  Uint8List _amplifyPcm16(Uint8List data, {double gain = 4.0}) {
+    final amplified = Int16List(data.length ~/ 2);
+    final view = ByteData.view(data.buffer);
+    for (var i = 0; i < data.length; i += 2) {
+      var sample = view.getInt16(i, Endian.little);
+      sample = (sample * gain).clamp(-32768, 32767).toInt();
+      amplified[i ~/ 2] = sample;
+    }
+    return amplified.buffer.asUint8List();
   }
 
   void _showForegroundNotification() async {

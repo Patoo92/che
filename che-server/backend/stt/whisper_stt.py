@@ -9,9 +9,9 @@ _model = None
 def get_model():
     global _model
     if _model is None:
-        print("[STT] Loading Whisper base model (CPU)...")
-        _model = WhisperModel("base", device="cpu", compute_type="int8")
-        print("[STT] Whisper model loaded")
+        print("[STT] Loading Whisper medium model (CPU)...")
+        _model = WhisperModel("medium", device="cpu", compute_type="int8")
+        print("[STT] Whisper medium model loaded")
     return _model
 
 def transcribe_audio(audio_bytes: bytes, sample_rate: int = 16000) -> str:
