@@ -1,8 +1,8 @@
 # CHE — Documentación Técnica Completa del Proyecto
 
-**Versión:** 1.2  
+**Versión:** 2.0  
 **Fecha:** Julio 2026  
-**Estado:** Fases 0-7 desplegadas y funcionando en hardware real. Backend con LLM + memoria + WebSocket activos. App Flutter (Vosk wake word + STT + flutter_tts) compilada e instalada en Moto G55. Pendiente: test end-to-end del phone, SSH re-setup, consolidación nocturna, Fase 8-10.  
+**Estado:** Desktop-first architecture. Python client on HP OMEN with full computer control. Backend with LLM + memory + WebSocket active on PC1 Ubuntu server.  
 **Costo mensual:** $0 USD
 
 ---
@@ -99,9 +99,9 @@ COMPORTAMIENTO:
 | Equipo | Especificaciones | Rol | Sistema Operativo |
 |---|---|---|---|
 | **PC Servidor** | i3, 4GB RAM | Servidor principal (cerebro + memoria) | Ubuntu Server 24.04 LTS (sin GUI) |
+| **HP OMEN** | Desktop | Cliente de voz + control total de PC | Windows 11 + Python 3.11+ |
 | **Disco Externo** | 1TB | Almacenamiento del Second Brain + backups | Ext4, montado en `/mnt/che/` |
 | **PC2** | i3, 4GB RAM | Terminal de consulta + respaldo | Windows 10 (sin cambios) |
-| **Moto G55** | Android | Interfaz de voz (thin client) | Android 10+ (sin cambios) |
 
 ### 3.2 Stack Tecnológico
 
@@ -111,13 +111,14 @@ COMPORTAMIENTO:
 | Contenedores | Docker + Docker Compose | 24+ | Apache 2.0 |
 | LLM (cerebro) | Ollama + Qwen 2.5 1.5B | v0.30+ | Apache 2.0 / MIT |
 | Embeddings | Ollama + nomic-embed-text | v0.30+ | Apache 2.0 |
-| STT + Wake word | Vosk (wake word + STT) | SDK nativo Android | Apache 2.0 |
-| TTS (texto→voz) | edge-tts | — | GPLv3 |
+| STT (speech-to-text) | faster-whisper (small, CPU int8) | 1.1+ | MIT |
+| Wake word | Vosk (grammar mode, "che") | 0.3+ | Apache 2.0 |
+| TTS (texto→voz) | pyttsx3 (SAPI5 Windows) | 2.98+ | MIT |
 | Base datos relacional | PostgreSQL 16 | 16+ | PostgreSQL License |
 | Base vectorial | pgvector | 0.7+ | PostgreSQL License |
 | Caché local | SQLite | 3.x | Dominio público |
 | Backend | Python + FastAPI + LangChain | Python 3.11+ | MIT |
-| App Android | Flutter (Dart) | 3.x + | BSD 3-Clause |
+| Desktop Client | Python + pystray + pyautogui | Python 3.11+ | MIT |
 | Conexión remota | Tailscale | — | Gratis (personal) |
 | Interfaz web Second Brain | Open WebUI | v0.9+ | MIT |
 | Búsqueda web | DuckDuckGo API (duckduckgo_search) | — | MIT |
@@ -138,11 +139,11 @@ No hay suscripciones, no hay APIs de pago, no hay servicios cloud. Solo electric
 ### 3.5 Flujo de Datos
 
 ```
-Celu (Moto G55) ←→ Tailscale ←→ PC Servidor (Ubuntu)
-                                    ↕
-                               Disco Externo 1TB
-                                    ↕
-                                  PC2 Win10 (consulta vía Open WebUI)
+HP OMEN (Desktop Client) ←→ Local Network ←→ PC Servidor (Ubuntu)
+                                                    ↕
+                                               Disco Externo 1TB
+                                                    ↕
+                                                  PC2 Win10 (consulta vía Open WebUI)
 ```
 
 ---
@@ -153,13 +154,18 @@ Celu (Moto G55) ←→ Tailscale ←→ PC Servidor (Ubuntu)
 
 ```mermaid
 flowchart TB
-    subgraph CELULAR ["📱 CELULAR (Moto G55) — Thin Client de Voz"]
+    subgraph DESKTOP ["🖥️ HP OMEN — Desktop Client"]
         direction TB
-        VOSK[Vosk<br/>Wake word + STT]
-        TTS[edge-tts<br/>TTS gratis]
-        APP[App Flutter<br/>WebSocket + SQLite + Overlay]
-        VOSK --> APP
-        TTS --> APP
+        WAKE[Vosk<br/>Wake word "che"]
+        STT[faster-whisper<br/>STT local CPU]
+        TTS[pyttsx3<br/>TTS local SAPI5]
+        TRAY[pystray<br/>System tray icon]
+        CONTROL[pyautogui<br/>Computer control]
+        WS_CLIENT[WebSocket Client<br/>Conexión al server]
+        WAKE --> STT
+        STT --> WS_CLIENT
+        TTS --> TRAY
+        CONTROL --> TRAY
     end
 
     subgraph PC1 ["🖥️ PC1 SERVIDOR (Ubuntu Server 24.04)"]
