@@ -1,0 +1,20 @@
+import os
+
+SERVER_URL = os.getenv("CHE_SERVER_URL", "ws://192.168.1.144:8000/ws")
+SERVER_HTTP = os.getenv("CHE_SERVER_HTTP", "http://192.168.1.144:8000")
+WS_SECRET = os.getenv("CHE_WS_SECRET", "drtWCjmGRU9/pAOfvNH9VUtR3w0vME/W5oneIHrxErI=")
+
+WHISPER_MODEL = os.getenv("CHE_WHISPER_MODEL", "small")
+WHISPER_DEVICE = os.getenv("CHE_WHISPER_DEVICE", "cpu")
+WHISPER_COMPUTE = os.getenv("CHE_WHISPER_COMPUTE", "int8")
+
+SAMPLE_RATE = 16000
+CHANNELS = 1
+BLOCK_SIZE = 4000
+WAKE_SAMPLES = 2
+SILENCE_THRESHOLD = 500
+SILENCE_TIMEOUT = 1.5
+MAX_RECORD_SECONDS = 30
+
+TRAY_ICON_PATH = os.path.join(os.path.dirname(__file__), "icon.png")
+TRAY_TOOLTIP = "CHE - Tu asistente"
